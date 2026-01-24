@@ -1,0 +1,31 @@
+{
+  "name": "shared-http-cache",
+  "version": "1.0.0",
+  "description": "Node.Js Utility for fetching multiple HTTP resources with browser-like cache management.",
+  "keywords": [
+    "http-cache",
+    "cache",
+    "cacache",
+    "rfc9111",
+    "cache-manager",
+    "http-cache-semantics"
+  ],
+  "homepage": "https://github.com/SorinGFS/shared-http-cache#readme",
+  "bugs": {
+    "url": "https://github.com/SorinGFS/shared-http-cache/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SorinGFS/shared-http-cache.git"
+  },
+  "license": "MIT",
+  "author": "SorinGFS",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "cacache": "^20.0.3"
+  }
+}
