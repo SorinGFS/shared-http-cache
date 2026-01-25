@@ -1,9 +1,7 @@
 ---
-
 title: Shared HTTP Cache
 
 description: Node.Js Utility for fetching multiple HTTP resources with browser-like cache management.
-
 ---
 
 ## Overview
@@ -166,6 +164,7 @@ sharedHttpCache.fetch(requests) -> Promise<this | Error[]>
 ```
 
 **Syntax:**
+
 ```ts
 fetch([{ url: string, integrity?: string, options?: RequestInit, callback?: function }]) -> Promise<this | Error[]>
 ```
@@ -187,7 +186,7 @@ await sharedHttpCache.fetch([
 
 Errors encountered during fetches are collected, and the returned `promise` either `resolves` with the instance itself for successful fetches or `rejects` with a list of `errors` for failed requests.
 
-The response is converted into a [Buffer](https://nodejs.org/api/buffer.html) served to `callback`, then stored in the `cache` along with the `response headers`. For any other status code, unless `stale-if-error` is present, an `error` is thrown.
+The response is converted into a [Buffer](https://nodejs.org/api/buffer.html) served to `callback`, then stored in the `cache` along with the `response headers`.
 
 ```ts
 callback({ buffer: Buffer, headers: Headers, fromCache: boolean }) -> void
@@ -212,6 +211,24 @@ await sharedHttpCache
             console.error(entry.url, entry.error);
         });
     });
+```
+
+### Fetch multiple files
+
+```js
+const urls = ['https://example.com/file1', 'https://example.com/file2'];
+const parser = ({ url, buffer, headers, fromCache }) => {
+    console.log(url);
+    console.log(headers);
+    console.log(fromCache);
+    console.log(buffer.toString());
+};
+
+const requests = urls.map((url) => ({ url, callback: (response) => parser({ ...response, url }) }));
+
+sharedHttpCache.fetch(requests).catch((errors) => {
+    errors.forEach((entry) => console.error(entry.url, entry.error));
+});
 ```
 
 ### Fetch with integrity
