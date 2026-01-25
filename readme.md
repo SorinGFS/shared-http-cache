@@ -59,6 +59,12 @@ Remaining freshness:
 remainingFreshness = freshnessLifetime − currentAge
 ```
 
+If request includes `min-fresh` its value is deducted from the `remainingFreshness`:
+
+```excel-formula
+remainingFreshness = remainingFreshness − minimumFreshness
+```
+
 If `remainingFreshness ≥ 0`, the response is served as fresh.
 
 ### Stale handling
