@@ -96,6 +96,7 @@ class SharedHttpCache {
                     if (!fromCache || response?.status === 304) {
                         const responseCacheControl = parseHeader(headers['cache-control']);
                         if (options.method !== 'GET') return;
+                        if (headers['vary'] || headers['content-range'] || headers['set-cookie']) return;
                         if (responseCacheControl['no-store'] || responseCacheControl['private']) return;
                         if (requestCacheControl['no-store'] || requestCacheControl['authorization']) return;
                         const store = async () => {

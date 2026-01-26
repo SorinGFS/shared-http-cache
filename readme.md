@@ -14,7 +14,10 @@ This implementation models a shared HTTP cache that follows the semantics define
 
 The cache is shared (not private) and applies shared-cache rules.
 
-- Privacy factors are considered while storing responses (`safe method` constraints, request `authorization`, response `cache-control="private"`).
+- Request `methods` other than `GET` are not stored.
+- Private responses are excluded from storage (request `Authorization` header, response `Cache-Control="private"` and `Set-Cookie` headers).
+- Variant responses are excluded from storage (response header `Vary` present).
+- Partial content is not stored (response `Content-Range` header).
 - No heuristic freshness is used.
 - Time calculations rely exclusively on locally recorded timestamps, not on server-provided `Date`.
 - Storage and eviction are deterministic; no background or implicit cleanup is assumed.
@@ -28,9 +31,9 @@ If no cached entry exists:
 - If the request requires `only-if-cached`, the cache returns a `504 HTTP status`.
 - Otherwise, the request is sent to the origin server.
 
-### Cache-control exclusions
+### Cache-Control exclusions
 
-Two cache-control directives may short-circuit normal cache usage:
+Two `Cache-Control` directives may short-circuit normal cache usage:
 
 - `no-cache` (request or response): cached data cannot be used without revalidation.
 - `no-store` (request or response): the response must not be stored.
@@ -51,7 +54,7 @@ Current age is derived from local metadata:
 currentAge = now − storedTime + incomingAge
 ```
 
-The `incomingAge` is taken from the stored response `age` header, if present.
+The `incomingAge` is taken from the stored response `Age` header, if present.
 
 Remaining freshness:
 
@@ -120,7 +123,7 @@ The accompanying state diagram represents the full decision flow:
 Legend
 
 1. `no-cache` may appear on request or response and always requires revalidation.
-2. `no-store` may appear on request or response; [privacy factors](#scope-and-assumptions) are considered.
+2. `no-store` may appear on request or response; See [scope and assumptions](#scope-and-assumptions) to understand other storage limitations.
 3. [Freshness evaluation](#freshness-evaluation) excludes `max-stale` that is evaluated only after strict freshness fails.
 4. `410 Gone` [cleanup](#cleanup-behavior) is an explicit design choice to keep the cache coherent; no heuristic eviction is used.
 
