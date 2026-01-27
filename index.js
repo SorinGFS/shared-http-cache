@@ -51,8 +51,7 @@ class SharedHttpCache {
                 const { url, options = {}, integrity, callback } = request;
                 if (!options.method) options.method = 'GET';
                 if (!options.headers) options.headers = {};
-                Object.keys(options.headers).some((key) => key.toLowerCase() === 'cache-control' && (options.headers['cache-control'] = options.headers[key]));
-                Object.keys(options.headers).some((key) => key.toLowerCase() === 'authorization' && (options.headers['authorization'] = options.headers[key]));
+                Object.keys(options.headers).forEach((key) => /\p{Lu}/u.test(key) && ((options.headers[key.toLowerCase()] = options.headers[key]), delete options.headers[key]));
                 // prettier-ignore
                 let response, buffer, headers, fromCache = true;
                 try {
@@ -98,7 +97,7 @@ class SharedHttpCache {
                         if (options.method !== 'GET') return;
                         if (headers['vary'] || headers['content-range'] || headers['set-cookie']) return;
                         if (responseCacheControl['no-store'] || responseCacheControl['private']) return;
-                        if (requestCacheControl['no-store'] || requestCacheControl['authorization']) return;
+                        if (requestCacheControl['no-store'] || options.headers['authorization']) return;
                         const store = async () => {
                             await this.store.rm.entry(this.cacheDir, url, { removeFully: true });
                             await this.store.put(this.cacheDir, url, buffer, integrity ? { metadata: { headers }, integrity } : { metadata: { headers } });
