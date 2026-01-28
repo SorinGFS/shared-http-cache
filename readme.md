@@ -15,11 +15,11 @@ This implementation models a shared HTTP cache that follows the semantics define
 The cache is shared (not private) and applies shared-cache rules.
 
 - Request `methods` other than `GET` are not stored.
-- Private responses are excluded from storage (request `Authorization` header, response `Cache-Control="private"` and `Set-Cookie` headers).
-- Variant responses are excluded from storage (response header `Vary` present).
-- Partial content is not stored (response `Content-Range` header).
-- No heuristic freshness is used.
+- Private responses (request `Authorization` header, response `Cache-Control="private"` and `Set-Cookie` headers) are not stored.
+- Variant responses (response header `Vary` present) are not stored.
+- Partial content (response `Content-Range` header) is not stored.
 - Time calculations rely exclusively on locally recorded timestamps, not on server-provided `Date`.
+- No heuristic freshness is used.
 - Storage and eviction are deterministic; no background or implicit cleanup is assumed.
 
 ### Request initialization and cache lookup
@@ -28,7 +28,7 @@ Each request begins by determining whether a cached response exists.
 
 If no cached entry exists:
 
-- If the request requires `only-if-cached`, the cache returns a `504 HTTP status`.
+- If the request `Cache-Control` header has `only-if-cached` directive, the cache returns a `504 HTTP status`.
 - Otherwise, the request is sent to the origin server.
 
 ### Cache-Control exclusions
@@ -41,12 +41,12 @@ Two `Cache-Control` directives may short-circuit normal cache usage:
 
 ### Freshness evaluation
 
-If a cached response exists and is not excluded, strict freshness is evaluated first, without considering `max-stale`.
+If a cached response exists and is not excluded, strict freshness is evaluated first.
 
 Freshness lifetime is computed from response headers:
 
-- `s-maxage` first, then `max-age`, if present
-- otherwise `Expires`, if present
+- `Cache-Control` header's`s-maxage` directive first, then `max-age`, if present
+- otherwise `Expires` header, if present
 
 Current age is derived from local metadata:
 
@@ -62,7 +62,7 @@ Remaining freshness:
 remainingFreshness = freshnessLifetime − currentAge
 ```
 
-If request includes `min-fresh` its value is deducted from the `remainingFreshness`:
+If request `Cache-Control` header includes `min-fresh` directive, its value is deducted from the `remainingFreshness`:
 
 ```excel-formula
 remainingFreshness = remainingFreshness − minimumFreshness
@@ -72,23 +72,23 @@ If `remainingFreshness ≥ 0`, the response is served as fresh.
 
 ### Stale handling
 
-If the response is stale, `max-stale` on the request is evaluated.
+If the response is stale, request `Cache-Control` header's `max-stale` directive is evaluated, if present.
 
-If `max-stale` value is unspecified → accept any staleness; otherwise the response is acceptable if:
+If `max-stale` is present, but its value is unspecified → accept any staleness; otherwise the response is acceptable if:
 
 ```excel-formula
-currentAge − freshnessLifetime ≤ max-stale
+currentAge ≤ freshnessLifetime + maximumStaleness
 ```
 
 If staleness exceeds the acceptable `max-stale`, the cache proceeds toward revalidation or origin fetch.
 
 ### Revalidation constraints
 
-Even if `max-stale` allows use of stale data:
+Even that request `Cache-Control` header's `max-stale` directive allows use of stale data:
 
-- `must-revalidate` or `proxy-revalidate` on the response forbids serving stale.
+- response `Cache-Control` header's `must-revalidate` or `proxy-revalidate` diretives forbids serving stale.
 - In that case, the cache must revalidate or fetch from the origin.
-- If `only-if-cached` also applies, the cache returns a `504 HTTP status` instead of revalidating.
+- If request `Cache-Control` header's `only-if-cached` directive also applies, the cache returns a `504 HTTP status` instead of revalidating.
 - If no revalidation constraint applies, stale content may be served.
 
 On revalidation, if the cached content includes `ETag` or `Last-Modified` automatically `If-None-Match` and `If-Modified-Since` headers are added to the request. Revalidated entries are explicitly replaced during each successful fetch to avoid unbounded growth in the index.
@@ -123,7 +123,7 @@ The accompanying state diagram represents the full decision flow:
 Legend
 
 1. `no-cache` may appear on request or response and always requires revalidation.
-2. `no-store` may appear on request or response; See [scope and assumptions](#scope-and-assumptions) to understand other storage limitations.
+2. `no-store` may appear on request or response; See [scope and assumptions](#scope-and-assumptions) for storage limitations.
 3. [Freshness evaluation](#freshness-evaluation) excludes `max-stale` that is evaluated only after strict freshness fails.
 4. `410 Gone` [cleanup](#cleanup-behavior) is an explicit design choice to keep the cache coherent; no heuristic eviction is used.
 
@@ -141,8 +141,6 @@ npm i shared-http-cache
 new SharedHttpCache(options?) -> SharedHttpCache
 ```
 
-### Create a shared HTTP cache instance.
-
 ```js
 const SharedHttpCache = require('shared-http-cache');
 const sharedHttpCache = new SharedHttpCache();
@@ -158,10 +156,7 @@ new SharedHttpCache({ cacheDir?: string, awaitStorage?: boolean }) -> SharedHttp
 - `awaitStorage`: await cache writes before continuing (default `false`)
 
 ```js
-const sharedHttpCache = new SharedHttpCache({
-    cacheDir: '/tmp/http-cache',
-    awaitStorage: true,
-});
+const sharedHttpCache = new SharedHttpCache({ cacheDir: '/tmp/http-cache', awaitStorage: true });
 ```
 
 ### Fetch
@@ -184,9 +179,7 @@ fetch([{ url: string, integrity?: string, options?: RequestInit, callback?: func
 await sharedHttpCache.fetch([
     {
         url: 'https://example.com/data.txt',
-        callback: ({ buffer }) => {
-            console.log(buffer.toString());
-        },
+        callback: ({ buffer }) => console.log(buffer.toString()),
     },
 ]);
 ```
@@ -215,11 +208,7 @@ await sharedHttpCache
             },
         },
     ])
-    .catch((errors) => {
-        errors.forEach((entry) => {
-            console.error(entry.url, entry.error);
-        });
-    });
+    .catch((errors) => errors.forEach((entry) => console.error(entry.url, entry.error)));
 ```
 
 ### Fetch multiple files
@@ -235,9 +224,7 @@ const parser = ({ url, buffer, headers, fromCache }) => {
 
 const requests = urls.map((url) => ({ url, callback: (response) => parser({ ...response, url }) }));
 
-sharedHttpCache.fetch(requests).catch((errors) => {
-    errors.forEach((entry) => console.error(entry.url, entry.error));
-});
+sharedHttpCache.fetch(requests).catch((errors) => errors.forEach((entry) => console.error(entry.url, entry.error)));
 ```
 
 ### Fetch with integrity
@@ -247,9 +234,7 @@ await sharedHttpCache.fetch([
     {
         url: 'https://example.com/file.bin',
         integrity: 'sha256-abcdef...',
-        callback: ({ buffer }) => {
-            console.log(buffer.length);
-        },
+        callback: ({ buffer }) => console.log(buffer.length),
     },
 ]);
 ```
@@ -271,14 +256,8 @@ They follow standard [RequestInit](https://developer.mozilla.org/en-US/docs/Web/
 await sharedHttpCache.fetch([
     {
         url: 'https://api.example.com/list',
-        options: {
-            headers: {
-                Accept: 'application/json',
-            },
-        },
-        callback: ({ buffer }) => {
-            console.log(buffer.toString());
-        },
+        options: { headers: { Accept: 'application/json' } },
+        callback: ({ buffer }) => console.log(buffer.toString()),
     },
 ]);
 ```
@@ -289,14 +268,8 @@ await sharedHttpCache.fetch([
 await sharedHttpCache.fetch([
     {
         url: 'https://example.com/data',
-        options: {
-            headers: {
-                'Cache-Control': 'no-cache',
-            },
-        },
-        callback: ({ fromCache }) => {
-            console.log(fromCache);
-        },
+        options: { headers: { 'Cache-Control': 'no-cache' } },
+        callback: ({ fromCache }) => console.log(fromCache),
     },
 ]);
 ```
@@ -307,14 +280,8 @@ await sharedHttpCache.fetch([
 await sharedHttpCache.fetch([
     {
         url: 'https://example.com/data',
-        options: {
-            headers: {
-                'Cache-Control': 'max-stale=3600',
-            },
-        },
-        callback: ({ fromCache }) => {
-            console.log(fromCache);
-        },
+        options: { headers: { 'Cache-Control': 'max-stale=3600' } },
+        callback: ({ fromCache }) => console.log(fromCache),
     },
 ]);
 ```
@@ -325,12 +292,8 @@ await sharedHttpCache.fetch([
 await sharedHttpCache.fetch([
     {
         url: 'https://example.com/resource',
-        options: {
-            method: 'HEAD',
-        },
-        callback: ({ headers }) => {
-            console.log(headers);
-        },
+        options: { method: 'HEAD' },
+        callback: ({ headers }) => console.log(headers),
     },
 ]);
 ```
