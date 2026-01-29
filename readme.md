@@ -1,7 +1,9 @@
 ---
+
 title: Shared HTTP Cache
 
 description: Node.Js Utility for fetching multiple HTTP resources with browser-like cache management.
+
 ---
 
 ## Overview
@@ -15,7 +17,7 @@ This implementation models a shared HTTP cache that follows the semantics define
 The cache is shared (not private) and applies shared-cache rules.
 
 - Request `methods` other than `GET` are not stored.
-- Private responses (request `Authorization` header, response `Cache-Control="private"` and `Set-Cookie` headers) are not stored.
+- Private responses (request `Authorization`, response `Cache-Control="private"` and `Set-Cookie` headers) are not stored.
 - Variant responses (response header `Vary` present) are not stored.
 - Partial content (response `Content-Range` header) is not stored.
 - Time calculations rely exclusively on locally recorded timestamps, not on server-provided `Date`.
@@ -92,6 +94,16 @@ Even that request `Cache-Control` header's `max-stale` directive allows use of s
 - If no revalidation constraint applies, stale content may be served.
 
 On revalidation, if the cached content includes `ETag` or `Last-Modified` automatically `If-None-Match` and `If-Modified-Since` headers are added to the request. Revalidated entries are explicitly replaced during each successful fetch to avoid unbounded growth in the index.
+
+### Subresource integrity
+
+The [subresosurce integrity specifications](https://developer.mozilla.org/en-US/docs/Web/Security/Defenses/Subresource_Integrity) are implemented on both, fetch and storage:
+1. if a request does not provide an `integrity hash`, then `cacache` will compute it using its default algorithm: `sha512`, and subsequent requests may use that `hash` to retrieve the resource directly from cache using `store.get.byDigest` function along with the regular search by url `store.get`.
+1. if a request does provide an `integrity hash`:
+    - if the related resource is not stored, then `node:fetch` will use it to verify the incomming response,
+    - if the related resource is stored and fresh, or is stale but revalidated with origin server, then `cacache` will use the `hash` to:
+        - get the resource directly from cache if the stored `integrity hash` matches the one provided, or,
+        - recompute the path and rebase the resource on the new path if the provided `integrity hash` is different. In other words, multiple `integrity hashes` may validate a resource, but only the last provided `hash` is responsible for its storage path, as `cacache` can work with a single `algorithm` at a time. This situation may only be encountered when a resource was initially stored without an `integrity hash` provided in the request, or when a different `integrity hash` is provided in the request for the same resource. An exception for resource rebase is the case when a different `integrity hash` is provided in the request along with `Cache-Control` header's `max-stale` directive.
 
 ### Origin request outcomes
 
@@ -191,7 +203,7 @@ Errors encountered during fetches are collected, and the returned `promise` eith
 The response is converted into a [Buffer](https://nodejs.org/api/buffer.html) served to `callback`, then stored in the `cache` along with the `response headers`.
 
 ```ts
-callback({ buffer: Buffer, headers: Headers, fromCache: boolean }) -> void
+callback({ buffer: Buffer, headers: Headers, fromCache: boolean, index: number }) -> void
 ```
 
 The `callback` provided for each request is executed before storing new content, allowing implementers to inspect, transform or validate the data before it's cached. The errors thrown by the `callback` are also catched and stored in the `errors` delivered by the `Promise.reject()`.
@@ -201,30 +213,29 @@ await sharedHttpCache
     .fetch([
         {
             url: 'https://example.com/data.txt',
-            callback: ({ buffer, headers, fromCache }) => {
+            callback: ({ buffer, headers, fromCache, index }) => {
                 console.log(buffer.toString());
                 console.log(headers);
-                console.log(fromCache);
+                console.log(index, fromCache);
             },
         },
     ])
-    .catch((errors) => errors.forEach((entry) => console.error(entry.url, entry.error)));
+    .catch((errors) => errors.forEach((entry) => console.error(entry.index, entry.url, entry.error.message)));
 ```
 
 ### Fetch multiple files
 
 ```js
 const urls = ['https://example.com/file1', 'https://example.com/file2'];
-const parser = ({ url, buffer, headers, fromCache }) => {
-    console.log(url);
+const parser = ({ url, buffer, headers, fromCache, index }) => {
+    console.log(index, fromCache, url);
     console.log(headers);
-    console.log(fromCache);
     console.log(buffer.toString());
 };
 
 const requests = urls.map((url) => ({ url, callback: (response) => parser({ ...response, url }) }));
 
-sharedHttpCache.fetch(requests).catch((errors) => errors.forEach((entry) => console.error(entry.url, entry.error)));
+sharedHttpCache.fetch(requests).catch((errors) => errors.forEach((entry) => console.error(entry.index, entry.url, entry.error.message)));
 ```
 
 ### Fetch with integrity
@@ -238,8 +249,6 @@ await sharedHttpCache.fetch([
     },
 ]);
 ```
-
-**Note:** `integrity `affects storage, not `callback` execution.
 
 ### Fetch options
 
@@ -335,3 +344,9 @@ Other available operations
 - sharedHttpCache.store.rm.content(...)
 
 See full list of [cacache options](https://github.com/npm/cacache?tab=readme-ov-file#api).
+
+## Bottom line
+
+- `max-stale` is intended to be used: many servers enforce `max-age=0`, but clients usually know how much staleness they can tolerate. Using `max-stale` (recommended up to 24 h) can significantly reduce network requests.
+- providing `integrity` on requests enables fast loads by allowing cached content to be read directly from store.
+- cache cleanup and eviction are deliberately left to the consumer; a well-chosen cleanup strategy is essential for maintaining good performance.

@@ -9,11 +9,12 @@ class SharedHttpCache {
     }
     /**
      * Fetch multiple resources with HTTP cache support.
-     * @param {Array<{url:string,integrity?:string,options?:RequestInit,callback:(result:{buffer:Buffer,headers:Headers,fromCache:boolean})=>void}>} requests
-     * @returns {Promise<this|{url: string, headers?: Headers, error: Error }[]>}
+     * @param {Array<{url:string,integrity?:string,options?:RequestInit,callback:(response:{buffer:Buffer,headers:Headers,fromCache:boolean,index:number})=>void}>} requests
+     * @returns {Promise<this|{url:string,headers?:Headers,error:Error,index:number}[]>}
      * @see [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/RequestInit), [Headers](https://developer.mozilla.org/en-US/docs/Web/API/Headers) MDN references
      */
     async fetch(requests) {
+        if (!Array.isArray(requests)) return Promise.reject([{ error: new TypeError('requests must be an array.') }]);
         const errors = [];
         const parseHeader = (string) => {
             if (!string || typeof string !== 'string') return {};
@@ -47,8 +48,9 @@ class SharedHttpCache {
             return false;
         };
         await Promise.all(
-            requests.map(async (request) => {
+            requests.map(async (request, index) => {
                 const { url, options = {}, integrity, callback } = request;
+                if (typeof url !== 'string') return errors.push({ error: new Error('Malformed request, url undefined.'), index });
                 if (!options.method) options.method = 'GET';
                 if (!options.headers) options.headers = {};
                 Object.keys(options.headers).forEach((key) => /\p{Lu}/u.test(key) && ((options.headers[key.toLowerCase()] = options.headers[key]), delete options.headers[key]));
@@ -64,7 +66,7 @@ class SharedHttpCache {
                         if (!isFreshFile || requestCacheControl['no-cache'] || responseCacheControl['no-cache']) fromCache = false;
                         if (requestCacheControl['max-stale'] && (responseCacheControl['must-revalidate'] || responseCacheControl['proxy-revalidate'])) fromCache = false;
                         if (fromCache) {
-                            buffer = (await this.store.get(this.cacheDir, url)).data;
+                            buffer = integrity && !requestCacheControl['max-stale'] ? await this.store.get.byDigest(this.cacheDir, integrity) : (await this.store.get(this.cacheDir, url)).data;
                             headers = file.metadata.headers;
                         }
                     } else {
@@ -72,6 +74,7 @@ class SharedHttpCache {
                         if (requestCacheControl['only-if-cached']) throw new Error('HTTP error! status: 504 Only-If-Cached');
                     }
                     if (!fromCache) {
+                        if (!file && integrity) options.integrity = integrity;
                         if (file && file.metadata.headers['etag']) options.headers['if-none-match'] = file.metadata.headers['etag'];
                         if (file && file.metadata.headers['last-modified']) options.headers['if-modified-since'] = file.metadata.headers['last-modified'];
                         response = await fetch(url, options);
@@ -83,7 +86,7 @@ class SharedHttpCache {
                             buffer = Buffer.from(await response.arrayBuffer());
                             headers = Object.fromEntries(response.headers.entries());
                         } else {
-                            if (response.status === 410) {
+                            if (file && response.status === 410) {
                                 this.store.rm.entry(this.cacheDir, url, { removeFully: true });
                                 this.store.rm.content(this.cacheDir, file.integrity);
                             }
@@ -91,7 +94,7 @@ class SharedHttpCache {
                         }
                     }
                     // chance to preform content validation before saving it to disk
-                    if (typeof callback === 'function') callback({ buffer, headers, fromCache });
+                    if (typeof callback === 'function') callback({ buffer, headers, fromCache, index });
                     if (!fromCache || response?.status === 304) {
                         const responseCacheControl = parseHeader(headers['cache-control']);
                         if (options.method !== 'GET') return;
@@ -100,12 +103,13 @@ class SharedHttpCache {
                         if (requestCacheControl['no-store'] || options.headers['authorization']) return;
                         const store = async () => {
                             await this.store.rm.entry(this.cacheDir, url, { removeFully: true });
-                            await this.store.put(this.cacheDir, url, buffer, integrity ? { metadata: { headers }, integrity } : { metadata: { headers } });
+                            if (file && integrity && file.integrity !== integrity) this.store.rm.content(this.cacheDir, file.integrity);
+                            await this.store.put(this.cacheDir, url, buffer, integrity ? { metadata: { headers }, integrity, algorithms: [integrity.split('-')[0]] } : { metadata: { headers } });
                         };
                         this.awaitStorage ? await store() : store();
                     }
                 } catch (error) {
-                    errors.push({ url, headers, error });
+                    errors.push({ url, headers, error, index });
                 }
             }),
         );
