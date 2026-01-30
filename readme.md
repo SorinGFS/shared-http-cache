@@ -315,16 +315,6 @@ The underlying cache store (`cacache`) is exposed directly.
 sharedHttpCache.store -> cacache
 ```
 
-**Compacting (example with await)**
-
-```ts
-sharedHttpCache.store.verify(cacheDir) -> Promise<Object>
-```
-
-```js
-await sharedHttpCache.store.verify(sharedHttpCache.cacheDir);
-```
-
 **Listing (example with promise)**
 
 ```js
@@ -335,7 +325,45 @@ sharedHttpCache
     .catch((errors) => console.error('Errors:', errors));
 ```
 
-Other available operations
+**Compacting (example with await)**
+
+```ts
+sharedHttpCache.store.verify(cacheDir) -> Promise<Object>
+```
+
+```js
+// deadbeef collected, because of invalid checksum.
+sharedHttpCache.store.verify(sharedHttpCache.cacheDir).then((stats) => {
+    console.log('cache is much nicer now! stats:', stats);
+});
+```
+
+**Basic cleanup strategy**
+
+```js
+const SharedHttpCache = require('shared-http-cache');
+// only-if-cached also means ... and is not stale!
+(async () => {
+    const cache = new SharedHttpCache({ cacheDir: '.cache', awaitStorage: true });
+    const entries = await cache.store.ls(cache.cacheDir);
+    const requests = Object.keys(entries).map((url) => ({ url, options: { headers: { 'cache-control': 'only-if-cached' } } }));
+    await cache.fetch(requests).catch(async (errors) => {
+        for (const { url } of errors) {
+            const file = url && await cache.store.get.info(cache.cacheDir, url);
+            if (file) {
+                await cache.store.rm.entry(cache.cacheDir, url, { removeFully: true });
+                await cache.store.rm.content(cache.cacheDir, file.integrity);
+            }
+        }
+    });
+})();
+```
+
+**Note:**
+
+- This is a fully `RFC 9111` compliant strategy that cleans up all the resources that can be determined as expired based on the stored response headers. For a more flexible approach, `max-stale=$acceptedStaleness` directive can be used in conjunction with `only-if-cached`. Cleanup strategies that rely on empirical calculations, such as `least recently used`, are `NOT RECOMMENDED`.
+
+**Other available operations**
 
 - sharedHttpCache.store.put(...)
 - sharedHttpCache.store.get(...)
@@ -349,4 +377,6 @@ See full list of [cacache options](https://github.com/npm/cacache?tab=readme-ov-
 
 - `max-stale` is intended to be used: many servers enforce `max-age=0`, but clients usually know how much staleness they can tolerate. Using `max-stale` (recommended up to 24 h) can significantly reduce network requests.
 - providing `integrity` on requests enables fast loads by allowing cached content to be read directly from store.
+- `SharedHttpCache` instantiation with `awaitStorage: true` is important when `fetch` is continued with `store` actions.
+- private or sensitive content is served, but not stored.
 - cache cleanup and eviction are deliberately left to the consumer; a well-chosen cleanup strategy is essential for maintaining good performance.
