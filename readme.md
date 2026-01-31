@@ -17,7 +17,7 @@ This implementation models a shared HTTP cache that follows the semantics define
 The cache is shared (not private) and applies shared-cache rules.
 
 - Request `methods` other than `GET` are not stored.
-- Private responses (request `Authorization`, response `Cache-Control="private"` and `Set-Cookie` headers) are not stored.
+- Private responses (request `Authorization`, response `Cache-Control="private"` and `Set-Cookie` headers) not stored.
 - Variant responses (response header `Vary` present) are not stored.
 - Partial content (response `Content-Range` header) is not stored.
 - Time calculations rely exclusively on locally recorded timestamps, not on server-provided `Date`.
@@ -375,8 +375,8 @@ See full list of [cacache options](https://github.com/npm/cacache?tab=readme-ov-
 
 ## Bottom line
 
-- `max-stale` is intended to be used: many servers enforce `max-age=0`, but clients usually know how much staleness they can tolerate. Using `max-stale` (recommended up to 24 h) can significantly reduce network requests.
+- `max-stale` is intended to be used: many servers enforce `max-age=0`, but clients know how much staleness they can tolerate. Using `max-stale` (recommended up to 24 h) can significantly reduce network requests.
 - providing `integrity` on requests enables fast loads by allowing cached content to be read directly from store.
-- `SharedHttpCache` instantiation with `awaitStorage: true` is important when `fetch` is continued with `store` actions.
+- `SharedHttpCache` init with `awaitStorage: true` is important when `fetch` is continued with `store` actions.
 - private or sensitive content is served, but not stored.
 - cache cleanup and eviction are deliberately left to the consumer; a well-chosen cleanup strategy is essential for maintaining good performance.

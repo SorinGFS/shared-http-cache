@@ -7,12 +7,6 @@ class SharedHttpCache {
         Object.assign(this, { cacheDir: '.cache', awaitStorage: false }, options);
         this.store = cacache;
     }
-    /**
-     * Fetch multiple resources with HTTP cache support.
-     * @param {Array<{url:string,integrity?:string,options?:RequestInit,callback:(response:{buffer:Buffer,headers:Headers,fromCache:boolean,index:number})=>void}>} requests
-     * @returns {Promise<this|{url:string,headers?:Headers,error:Error,index:number}[]>}
-     * @see [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/RequestInit), [Headers](https://developer.mozilla.org/en-US/docs/Web/API/Headers) MDN references
-     */
     async fetch(requests) {
         if (!Array.isArray(requests)) return Promise.reject([{ error: new TypeError('requests must be an array.') }]);
         const errors = [];
