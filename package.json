@@ -1,6 +1,6 @@
 {
   "name": "shared-http-cache",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Node.Js Utility for fetching multiple HTTP resources with browser-like cache management.",
   "keywords": [
     "http-cache",
