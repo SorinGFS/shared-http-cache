@@ -4,7 +4,7 @@ const cacache = require('cacache');
 // cacache wrapper
 class SharedHttpCache {
     constructor(options = {}) {
-        Object.assign(this, { cacheDir: '.cache', awaitStorage: false }, options);
+        Object.assign(this, { cacheDir: '.cache', awaitStorage: false, requestTimeoutMs: 5000 }, options);
         this.store = cacache;
     }
     async fetch(requests) {
@@ -45,6 +45,9 @@ class SharedHttpCache {
             requests.map(async (request, index) => {
                 const { url, options = {}, integrity, callback } = request;
                 if (typeof url !== 'string') return errors.push({ error: new Error('Malformed request, url undefined.'), index });
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);
+                options.signal = controller.signal;
                 if (!options.method) options.method = 'GET';
                 if (!options.headers) options.headers = {};
                 Object.keys(options.headers).forEach((key) => /\p{Lu}/u.test(key) && ((options.headers[key.toLowerCase()] = options.headers[key]), delete options.headers[key]));
@@ -91,8 +94,7 @@ class SharedHttpCache {
                     if (typeof callback === 'function') callback({ buffer, headers, fromCache, index });
                     if (!fromCache || response?.status === 304) {
                         const responseCacheControl = parseHeader(headers['cache-control']);
-                        if (options.method !== 'GET') return;
-                        if (headers['vary'] || headers['content-range'] || headers['set-cookie']) return;
+                        if (options.method !== 'GET' || parseHeader(headers['vary'])['*']) return;
                         if (responseCacheControl['no-store'] || responseCacheControl['private']) return;
                         if (requestCacheControl['no-store'] || options.headers['authorization']) return;
                         const store = async () => {
@@ -104,6 +106,8 @@ class SharedHttpCache {
                     }
                 } catch (error) {
                     errors.push({ url, headers, error, index });
+                } finally {
+                    clearTimeout(timeout);
                 }
             }),
         );

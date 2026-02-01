@@ -18,7 +18,7 @@ The cache is shared (not private) and applies shared-cache rules.
 
 - Request `methods` other than `GET` are not stored.
 - Private responses (request `Authorization`, response `Cache-Control="private"` and `Set-Cookie` headers) not stored.
-- Variant responses (response header `Vary` present) are not stored.
+- Variant responses (response header `Vary="*"`) are not stored.
 - Partial content (response `Content-Range` header) is not stored.
 - Time calculations rely exclusively on locally recorded timestamps, not on server-provided `Date`.
 - No heuristic freshness is used.
@@ -161,14 +161,15 @@ const sharedHttpCache = new SharedHttpCache();
 ### Init options
 
 ```ts
-new SharedHttpCache({ cacheDir?: string, awaitStorage?: boolean }) -> SharedHttpCache
+new SharedHttpCache({ cacheDir?: string, awaitStorage?: boolean, requestTimeoutMs?: number }) -> SharedHttpCache
 ```
 
 - `cacheDir`: cache storage directory (default `.cache`)
 - `awaitStorage`: await cache writes before continuing (default `false`)
+- `requestTimeoutMs`: amount of time in milliseconds after which a request is timed out (default: `5000`)
 
 ```js
-const sharedHttpCache = new SharedHttpCache({ cacheDir: '/tmp/http-cache', awaitStorage: true });
+const sharedHttpCache = new SharedHttpCache({ cacheDir: '/tmp/http-cache', awaitStorage: true, requestTimeoutMs: 1000 });
 ```
 
 ### Fetch

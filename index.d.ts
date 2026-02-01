@@ -23,6 +23,8 @@ declare class SharedHttpCache {
         cacheDir?: string;
         /** Await storage (default: false) */
         awaitStorage?: boolean;
+        /** Request timeout in milliseconds (default: 5000) */
+        requestTimeoutMs?: number;
         /** Optional properties */
         [key: string]: any;
     });
@@ -30,6 +32,8 @@ declare class SharedHttpCache {
     readonly cacheDir: string;
     /** Await storage (default: false) */
     readonly awaitStorage: boolean;
+    /** Request timeout in milliseconds (default: 5000) */
+    readonly requestTimeoutMs: number;
     /** Fetch multiple requests (async).*/
     fetch(requests: readonly FetchRequest[]): Promise<this>;
     /** Storage management */
