@@ -19,7 +19,7 @@ class SharedHttpCache {
             }
             return result;
         };
-        const isFresh = (file, requestCacheControl = {}) => {
+        const isStale = (file, requestCacheControl = {}) => {
             const storedCacheControl = parseHeader(file.metadata.headers['cache-control']);
             const previousAge = Number(file.metadata.headers['age'] || 0);
             const currentAge = previousAge + (Date.now() - file.time) / 1000;
@@ -32,14 +32,9 @@ class SharedHttpCache {
             }
             if (requestCacheControl['max-age'] !== undefined) lifetime = Math.min(lifetime, requestCacheControl['max-age']);
             const remainingLifetime = lifetime - currentAge;
-            if (requestCacheControl['min-fresh'] !== undefined && remainingLifetime < requestCacheControl['min-fresh']) return false;
-            if (remainingLifetime >= 0) return true; // not stale
-            const maxStale = requestCacheControl['max-stale'];
-            if (maxStale !== undefined) {
-                if (maxStale === true) return true; // unspecified max-stale → accept any staleness
-                if (currentAge <= lifetime + maxStale) return true;
-            }
-            return false;
+            if (requestCacheControl['min-fresh'] !== undefined && remainingLifetime >= requestCacheControl['min-fresh']) return false;
+            if (remainingLifetime >= 0) return false; // not stale
+            return { lifetime, currentAge };
         };
         await Promise.all(
             requests.map(async (request, index) => {
@@ -56,21 +51,17 @@ class SharedHttpCache {
                 try {
                     const requestCacheControl = parseHeader(options.headers['cache-control']);
                     const file = await this.store.get.info(this.cacheDir, url);
-                    const isFreshFile = file && isFresh(file, requestCacheControl);
-                    if (file) {
-                        const responseCacheControl = parseHeader(file.metadata.headers['cache-control']);
-                        if (!isFreshFile && requestCacheControl['only-if-cached']) throw new Error('HTTP error! status: 504 Only-If-Cached');
-                        if (!isFreshFile || requestCacheControl['no-cache'] || responseCacheControl['no-cache']) fromCache = false;
-                        if (requestCacheControl['max-stale'] && (responseCacheControl['must-revalidate'] || responseCacheControl['proxy-revalidate'])) fromCache = false;
-                        if (fromCache) {
-                            buffer = integrity && !requestCacheControl['max-stale'] ? await this.store.get.byDigest(this.cacheDir, integrity) : (await this.store.get(this.cacheDir, url)).data;
-                            headers = file.metadata.headers;
-                        }
+                    const isStaleFile = file && isStale(file, requestCacheControl); // unspecified max-stale → accept any staleness
+                    const isAcceptedStaleFile = isStaleFile && requestCacheControl['max-stale'] && (requestCacheControl['max-stale'] === true || isStaleFile.currentAge <= isStaleFile.lifetime + requestCacheControl['max-stale']);
+                    const storedCacheControl = file && parseHeader(file.metadata.headers['cache-control']);
+                    const revalidate = storedCacheControl?.['must-revalidate'] || storedCacheControl?.['proxy-revalidate'];
+                    const noCache = requestCacheControl['no-cache'] || storedCacheControl?.['no-cache'];
+                    if (!file || (isStaleFile && !isAcceptedStaleFile) || (isAcceptedStaleFile && revalidate) || noCache) fromCache = false;
+                    if (fromCache) {
+                        buffer = integrity && !isAcceptedStaleFile ? await this.store.get.byDigest(this.cacheDir, integrity) : (await this.store.get(this.cacheDir, url)).data;
+                        headers = file.metadata.headers;
                     } else {
-                        fromCache = false;
                         if (requestCacheControl['only-if-cached']) throw new Error('HTTP error! status: 504 Only-If-Cached');
-                    }
-                    if (!fromCache) {
                         if (!file && integrity) options.integrity = integrity;
                         if (file && file.metadata.headers['etag']) options.headers['if-none-match'] = file.metadata.headers['etag'];
                         if (file && file.metadata.headers['last-modified']) options.headers['if-modified-since'] = file.metadata.headers['last-modified'];
