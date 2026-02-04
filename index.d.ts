@@ -23,6 +23,8 @@ declare class SharedHttpCache {
         cacheDir?: string;
         /** Await storage (default: false) */
         awaitStorage?: boolean;
+        /** Defer garbage collection to a later action (default: true) */
+        deferGarbageCollection?: boolean;
         /** Request timeout in milliseconds (default: 5000) */
         requestTimeoutMs?: number;
         /** Optional properties */
@@ -32,6 +34,8 @@ declare class SharedHttpCache {
     readonly cacheDir: string;
     /** Await storage (default: false) */
     readonly awaitStorage: boolean;
+    /** Defer garbage collection to a later action (default: true) */
+    readonly deferGarbageCollection: boolean;
     /** Request timeout in milliseconds (default: 5000) */
     readonly requestTimeoutMs: number;
     /** Fetch multiple requests (async).*/

@@ -161,12 +161,13 @@ const sharedHttpCache = new SharedHttpCache();
 ### Init options
 
 ```ts
-new SharedHttpCache({ cacheDir?: string, awaitStorage?: boolean, requestTimeoutMs?: number }) -> SharedHttpCache
+new SharedHttpCache({ cacheDir?: string, requestTimeoutMs?: number, awaitStorage?: boolean, deferGarbageCollection: boolean }) -> SharedHttpCache
 ```
 
-- `cacheDir`: cache storage directory (default `.cache`)
-- `awaitStorage`: await cache writes before continuing (default `false`)
-- `requestTimeoutMs`: amount of time in milliseconds after which a request is timed out (default: `5000`)
+- `cacheDir`: cache storage directory (default `.cache`).
+- `requestTimeoutMs`: amount of time in milliseconds after which a request is timed out (default: `5000`).
+- `awaitStorage`: await cache writes before continuing (default `false`).
+- `deferGarbageCollection`: defer garbage collection to a later action (default `true`). If `false`, the stored content index file is replaced with a clean new one impacting performance.  
 
 ```js
 const sharedHttpCache = new SharedHttpCache({ cacheDir: '/tmp/http-cache', awaitStorage: true, requestTimeoutMs: 1000 });

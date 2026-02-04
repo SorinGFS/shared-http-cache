@@ -4,7 +4,7 @@ const cacache = require('cacache');
 // cacache wrapper
 class SharedHttpCache {
     constructor(options = {}) {
-        Object.assign(this, { cacheDir: '.cache', awaitStorage: false, requestTimeoutMs: 5000 }, options);
+        Object.assign(this, { cacheDir: '.cache', awaitStorage: false, deferGarbageCollection: true, requestTimeoutMs: 5000 }, options);
         this.store = cacache;
     }
     async fetch(requests) {
@@ -23,7 +23,7 @@ class SharedHttpCache {
             const storedCacheControl = parseHeader(file.metadata.headers['cache-control']);
             const previousAge = Number(file.metadata.headers['age'] || 0);
             const currentAge = previousAge + (Date.now() - file.time) / 1000;
-            let lifetime; // Response freshness lifetime (s-maxage > max-age > Expires)
+            let lifetime = 0; // Response freshness lifetime (s-maxage > max-age > Expires)
             if (storedCacheControl['s-maxage'] !== undefined) lifetime = storedCacheControl['s-maxage'];
             else if (storedCacheControl['max-age'] !== undefined) lifetime = storedCacheControl['max-age'];
             else {
@@ -41,7 +41,7 @@ class SharedHttpCache {
                 const { url, options = {}, integrity, callback } = request;
                 if (typeof url !== 'string') return errors.push({ error: new Error('Malformed request, url undefined.'), index });
                 const controller = new AbortController();
-                const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);
+                const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs * Math.ceil(requests.length / 256));
                 options.signal = controller.signal;
                 if (!options.method) options.method = 'GET';
                 if (!options.headers) options.headers = {};
@@ -89,7 +89,7 @@ class SharedHttpCache {
                         if (responseCacheControl['no-store'] || responseCacheControl['private']) return;
                         if (requestCacheControl['no-store'] || options.headers['authorization']) return;
                         const store = async () => {
-                            await this.store.rm.entry(this.cacheDir, url, { removeFully: true });
+                            if (!this.deferGarbageCollection) await this.store.rm.entry(this.cacheDir, url, { removeFully: true });
                             if (file && integrity && file.integrity !== integrity) this.store.rm.content(this.cacheDir, file.integrity);
                             await this.store.put(this.cacheDir, url, buffer, integrity ? { metadata: { headers }, integrity, algorithms: [integrity.split('-')[0]] } : { metadata: { headers } });
                         };
