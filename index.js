@@ -69,7 +69,6 @@ class SharedHttpCache {
                         if (response.status === 304) {
                             buffer = (await this.store.get(this.cacheDir, url)).data;
                             headers = { ...file.metadata.headers, ...Object.fromEntries(response.headers.entries()) };
-                            fromCache = true;
                         } else if (response.ok) {
                             buffer = Buffer.from(await response.arrayBuffer());
                             headers = Object.fromEntries(response.headers.entries());
@@ -81,9 +80,9 @@ class SharedHttpCache {
                             throw new Error(`HTTP error! status: ${response.status}`);
                         }
                     }
-                    // chance to preform content validation before saving it to disk
+                    // chance to preform content inspection before storage
                     if (typeof callback === 'function') callback({ buffer, headers, fromCache, index });
-                    if (!fromCache || response?.status === 304) {
+                    if (!fromCache) {
                         const responseCacheControl = parseHeader(headers['cache-control']);
                         if (options.method !== 'GET' || parseHeader(headers['vary'])['*']) return;
                         if (responseCacheControl['no-store'] || responseCacheControl['private']) return;
