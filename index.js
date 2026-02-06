@@ -15,7 +15,7 @@ class SharedHttpCache {
             const result = {};
             for (const part of string.split(',').reverse()) {
                 const [key, value] = part.trim().split('=');
-                result[key] = value === undefined ? true : Number.isNaN(+value) ? value : +value;
+                result[key.toLocaleLowerCase()] = value === undefined ? true : Number.isNaN(+value) ? value : +value;
             }
             return result;
         };
