@@ -10,7 +10,7 @@ description: Node.Js Utility for fetching multiple HTTP resources with browser-l
 
 ### Shared HTTP Cache Semantics
 
-This implementation models a shared HTTP cache that follows the semantics defined in [RFC 9111](https://datatracker.ietf.org/doc/html/rfc9111.html), with explicitly documented assumptions and controlled decisions. It uses a content-addressed cache through [cacache](https://github.com/npm/cacache) providing lockless, high-concurrency cache access, that along with the downloaded `content` is storing the associated `HTTP response headers` in the cache metadata. Overall, the design aims to provide `browser-like` caching behavior in a `Node.js` environment.
+This implementation models a shared HTTP cache that follows the semantics defined in [RFC 9111](https://datatracker.ietf.org/doc/html/rfc9111.html), with explicitly documented assumptions and controlled decisions. It uses a content-addressed cache through [cacache](https://github.com/npm/cacache) providing lockless, high-concurrency cache access, that stores along with the downloaded `content` the associated `HTTP response headers` in the cache metadata. Overall, the design aims to provide `browser-like` caching behavior in a `Node.js` environment.
 
 ### Scope and assumptions
 
@@ -47,7 +47,7 @@ If a cached response exists and is not excluded, strict freshness is evaluated f
 
 Freshness lifetime is computed from response headers:
 
-- `Cache-Control` header's`s-maxage` directive first, then `max-age`, if present
+- `Cache-Control` header's `s-maxage` directive first, then `max-age`, if present
 - otherwise `Expires` header, if present
 
 Current age is derived from local metadata:
@@ -86,22 +86,22 @@ If staleness exceeds the acceptable `max-stale`, the cache proceeds toward reval
 
 ### Revalidation constraints
 
-Even that request `Cache-Control` header's `max-stale` directive allows use of stale data:
+Even though the request `Cache-Control` header's `max-stale` directive allows use of stale data:
 
-- response `Cache-Control` header's `must-revalidate` or `proxy-revalidate` diretives forbids serving stale.
+- response `Cache-Control` header's `must-revalidate` or `proxy-revalidate` directives forbid serving stale.
 - In that case, the cache must revalidate or fetch from the origin.
 - If request `Cache-Control` header's `only-if-cached` directive also applies, the cache returns a `504 HTTP status` instead of revalidating.
 - If no revalidation constraint applies, stale content may be served.
 
-On revalidation, if the cached content includes `ETag` or `Last-Modified` automatically `If-None-Match` and `If-Modified-Since` headers are added to the request. Revalidated entries are explicitly replaced during each successful fetch to avoid unbounded growth in the index.
+On revalidation, if the cached content includes `ETag` or `Last-Modified`, `If-None-Match` or respectively `If-Modified-Since` headers are automatically added to the request. Revalidated entries are explicitly replaced during each successful fetch to avoid unbounded growth in the index.
 
 ### Subresource integrity
 
-The [subresosurce integrity specifications](https://developer.mozilla.org/en-US/docs/Web/Security/Defenses/Subresource_Integrity) are implemented on both, fetch and storage:
+The [subresource integrity specifications](https://developer.mozilla.org/en-US/docs/Web/Security/Defenses/Subresource_Integrity) are implemented on both, fetch and storage:
 1. if a request does not provide an `integrity hash`, then `cacache` will compute it using its default algorithm: `sha512`, and subsequent requests may use that `hash` to retrieve the resource directly from cache using `store.get.byDigest` function along with the regular search by url `store.get`.
 1. if a request does provide an `integrity hash`:
-    - if the related resource is not stored, then `node:fetch` will use it to verify the incomming response,
-    - if the related resource is stored and fresh, or is stale but revalidated with origin server, then `cacache` will use the `hash` to:
+    - if the related resource is not stored, then `node:fetch` will use it to verify the incoming response,
+    - if the related resource is stored and fresh, or is stale but revalidated with the origin server, then `cacache` will use the `hash` to:
         - get the resource directly from cache if the stored `integrity hash` matches the one provided, or,
         - recompute the path and rebase the resource on the new path if the provided `integrity hash` is different. In other words, multiple `integrity hashes` may validate a resource, but only the last provided `hash` is responsible for its storage path, as `cacache` can work with a single `algorithm` at a time. This situation may only be encountered when a resource was initially stored without an `integrity hash` provided in the request, or when a different `integrity hash` is provided in the request for the same resource. An exception for resource rebase is the case when a different `integrity hash` is provided in the request along with `Cache-Control` header's `max-stale` directive.
 
@@ -208,7 +208,7 @@ The response is converted into a [Buffer](https://nodejs.org/api/buffer.html) se
 callback({ buffer: Buffer, headers: Headers, fromCache: boolean, index: number }) -> void
 ```
 
-The `callback` provided for each request is executed before storing new content, allowing implementers to inspect, transform or validate the data before it's cached. The errors thrown by the `callback` are also catched and stored in the `errors` delivered by the `Promise.reject()`.
+The `callback` provided for each request is executed before storing new content, allowing implementers to inspect, transform or validate the data before it's cached. The errors thrown by the `callback` are also caught and stored in the `errors` delivered by the `Promise.reject()`.
 
 ```js
 await sharedHttpCache
@@ -363,7 +363,7 @@ const SharedHttpCache = require('shared-http-cache');
 
 **Note:**
 
-- This is a fully `RFC 9111` compliant strategy that cleans up all the resources that can be determined as expired based on the stored response headers. For a more flexible approach, `max-stale=$acceptedStaleness` directive can be used in conjunction with `only-if-cached`. Cleanup strategies that rely on empirical calculations, such as `least recently used`, are `NOT RECOMMENDED`.
+- This is a fully `RFC 9111` compliant strategy that cleans up all the resources that can be determined as expired based on the stored response headers. For a more flexible approach, the `max-stale=$acceptedStaleness` directive can be used in conjunction with `only-if-cached`. Cleanup strategies that rely on empirical calculations, such as `least recently used`, are `NOT RECOMMENDED`.
 
 **Other available operations**
 
